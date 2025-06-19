@@ -63,3 +63,27 @@ jobs:
         Focus on security vulnerabilities and performance issues.
         Pay special attention to database queries and API endpoints.
 ```
+
+## Testing
+
+This repository includes comprehensive tests for the Claude code review workflow:
+
+### Automated Tests
+- **Syntax Validation**: YAML validation for all workflows
+- **Component Validation**: Checks required triggers, permissions, and secrets
+- **Logic Testing**: PR size calculation and labeling algorithms
+- **Input Validation**: Tests different configuration scenarios
+
+### Integration Tests
+Manual workflow dispatch tests for:
+- Small PR scenarios (under size limits)
+- Large PR scenarios (over size limits)
+- Draft PR handling
+- Custom prompt functionality
+- Comment collapsing logic
+
+### Running Tests
+- Automatic tests run on every push/PR
+- Integration tests: Actions → "Integration Tests" → "Run workflow"
+
+See [`tests/README.md`](tests/README.md) for detailed testing documentation.
