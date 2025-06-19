@@ -6,7 +6,7 @@ on:
 
 jobs:
   claude-review:
-    uses: ./workflows/claude-code-review.yml
+    uses: ./.github/workflows/claude-code-review.yml
     with:
       skip_large_prs: true
       max_files: 50
