@@ -124,51 +124,51 @@ jobs:
             let claudeCommentsSkipped = 0;
             let collapsedAttempts = 0;
             
-            for (const [index, comment] of comments.data.entries()) {
+            // Sort Claude comments by creation date to ensure proper attempt numbering
+            const claudeComments = comments.data.filter(comment => {
               const isBot = comment.user.login === 'github-actions[bot]';
               const hasClaudeFinished = comment.body.includes('Claude finished') || comment.body.includes('**Claude finished');
+              return isBot && hasClaudeFinished;
+            }).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            
+            console.log(`🔍 Found ${claudeComments.length} Claude comments to process`);
+            
+            for (const [claudeIndex, comment] of claudeComments.entries()) {
               const hasDetails = comment.body.trim().startsWith('<details><summary>');
+              const attemptNumber = claudeIndex + 1; // 1-based indexing for attempt numbers
               
-              console.log(`📝 Comment ${index + 1}:`);
+              console.log(`📝 Claude Comment ${claudeIndex + 1}:`);
               console.log(`   - ID: ${comment.id}`);
-              console.log(`   - User: ${comment.user.login}`);
               console.log(`   - Created: ${comment.created_at}`);
-              console.log(`   - Is Bot: ${isBot}`);
-              console.log(`   - Has Claude finished: ${hasClaudeFinished}`);
               console.log(`   - Has details: ${hasDetails}`);
-              console.log(`   - Body preview: ${comment.body.substring(0, 100)}...`);
+              console.log(`   - Will be attempt #${attemptNumber}`);
               
-              if (isBot && hasClaudeFinished) {
-                claudeCommentsFound++;
+              claudeCommentsFound++;
+              
+              if (!hasDetails) {
+                console.log(`✅ COLLAPSING Comment ${comment.id} as Attempt #${attemptNumber}`);
                 
-                if (!hasDetails) {
-                  collapsedAttempts++;
-                  console.log(`✅ COLLAPSING Comment ${comment.id}`);
-                  
-                  if (index > 0 && index % 10 === 0) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                  }
-                  
-                  const attemptNumber = collapsedAttempts;
-                  console.log(`🔢 DEBUG: Using attempt number ${attemptNumber} for comment ${comment.id}`);
-                  const wrappedBody = `<details><summary>Previous Claude Review (Attempt #${attemptNumber})</summary>\n\n${comment.body}\n\n</details>`;
-                  
-                  try {
-                    await github.rest.issues.updateComment({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      comment_id: comment.id,
-                      body: wrappedBody
-                    });
-                    claudeCommentsCollapsed++;
-                    console.log(`✅ Successfully collapsed comment ${comment.id}`);
-                  } catch (error) {
-                    console.log(`❌ Failed to collapse comment ${comment.id}: ${error.message}`);
-                  }
-                } else {
-                  claudeCommentsSkipped++;
-                  console.log(`⏭️ SKIPPING Comment ${comment.id} (already has details)`);
+                if (claudeIndex > 0 && claudeIndex % 10 === 0) {
+                  await new Promise(resolve => setTimeout(resolve, 100));
                 }
+                
+                const wrappedBody = `<details><summary>Previous Claude Review (Attempt #${attemptNumber})</summary>\n\n${comment.body}\n\n</details>`;
+                
+                try {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: comment.id,
+                    body: wrappedBody
+                  });
+                  claudeCommentsCollapsed++;
+                  console.log(`✅ Successfully collapsed comment ${comment.id} as Attempt #${attemptNumber}`);
+                } catch (error) {
+                  console.log(`❌ Failed to collapse comment ${comment.id}: ${error.message}`);
+                }
+              } else {
+                claudeCommentsSkipped++;
+                console.log(`⏭️ SKIPPING Comment ${comment.id} (already has details)`);
               }
             }
             
