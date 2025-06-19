@@ -1,0 +1,12 @@
+{
+  "name": "Claude Code Review",
+  "description": "Automated code review using Claude AI for pull requests",
+  "iconName": "code-review",
+  "categories": [
+    "Code Quality",
+    "Continuous Integration"
+  ],
+  "filePatterns": [
+    ".github/workflows/claude-review.yml"
+  ]
+}
