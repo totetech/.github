@@ -1,0 +1,16 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, edited]
+
+jobs:
+  claude-review:
+    uses: totetech/.github/.github/workflows/claude-code-review.yml@main
+    with:
+      skip_large_prs: true
+      max_files: 50
+      max_lines: 2000
+      # custom_prompt: |
+      #   Add your custom review prompt here if needed
+      #   This will override the default prompt
