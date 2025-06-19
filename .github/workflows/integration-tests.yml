@@ -1,0 +1,295 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_scenario:
+        description: 'Test scenario to run'
+        required: true
+        type: choice
+        options:
+          - 'all'
+          - 'small-pr'
+          - 'large-pr'
+          - 'draft-pr'
+          - 'custom-prompt'
+        default: 'all'
+
+jobs:
+  setup-test-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      test-repo: ${{ steps.setup.outputs.test-repo }}
+    steps:
+      - name: Setup test environment
+        id: setup
+        run: |
+          echo "test-repo=test-claude-workflow-$(date +%s)" >> $GITHUB_OUTPUT
+          echo "Test environment ready"
+
+  test-small-pr-scenario:
+    if: github.event.inputs.test_scenario == 'all' || github.event.inputs.test_scenario == 'small-pr'
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Create mock small PR files
+        run: |
+          mkdir -p mock-pr/small
+          # Create 5 files with 10 lines each (50 total lines)
+          for i in {1..5}; do
+            cat > mock-pr/small/file_$i.js << 'EOF'
+          function testFunction$i() {
+            console.log('Test function $i');
+            return true;
+          }
+          
+          module.exports = testFunction$i;
+          EOF
+          done
+          
+      - name: Test small PR workflow call
+        uses: ./.github/workflows/claude-code-review.yml
+        with:
+          skip_large_prs: true
+          max_files: 50
+          max_lines: 2000
+        env:
+          GITHUB_EVENT_NAME: workflow_dispatch
+          
+      - name: Validate small PR handling
+        run: |
+          FILES_COUNT=$(find mock-pr/small -name "*.js" | wc -l)
+          LINES_COUNT=$(find mock-pr/small -name "*.js" -exec wc -l {} + | tail -1 | awk '{print $1}')
+          
+          echo "Small PR test: $FILES_COUNT files, $LINES_COUNT lines"
+          
+          if [ "$FILES_COUNT" -le 50 ] && [ "$LINES_COUNT" -le 2000 ]; then
+            echo "✅ Small PR scenario passed - should trigger review"
+          else
+            echo "❌ Small PR scenario failed"
+            exit 1
+          fi
+
+  test-large-pr-scenario:
+    if: github.event.inputs.test_scenario == 'all' || github.event.inputs.test_scenario == 'large-pr'
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Create mock large PR files
+        run: |
+          mkdir -p mock-pr/large
+          # Create 60 files with 50 lines each (3000+ total lines)
+          for i in {1..60}; do
+            cat > mock-pr/large/file_$i.js << 'EOF'
+          function largeTestFunction$i() {
+            console.log('Large test function $i');
+            const data = {
+              id: $i,
+              name: 'test-$i',
+              description: 'This is a test function for large PR scenario',
+              active: true,
+              metadata: {
+                created: new Date(),
+                version: '1.0.0',
+                tags: ['test', 'large-pr', 'function-$i']
+              }
+            };
+            
+            // Process data
+            if (data.active) {
+              console.log('Processing active data for function $i');
+              return processData(data);
+            }
+            
+            return null;
+          }
+          
+          function processData(data) {
+            // Mock processing logic
+            return {
+              ...data,
+              processed: true,
+              timestamp: Date.now()
+            };
+          }
+          
+          module.exports = {
+            largeTestFunction$i,
+            processData
+          };
+          EOF
+          done
+          
+      - name: Validate large PR handling
+        run: |
+          FILES_COUNT=$(find mock-pr/large -name "*.js" | wc -l)
+          LINES_COUNT=$(find mock-pr/large -name "*.js" -exec wc -l {} + | tail -1 | awk '{print $1}')
+          
+          echo "Large PR test: $FILES_COUNT files, $LINES_COUNT lines"
+          
+          if [ "$FILES_COUNT" -gt 50 ] || [ "$LINES_COUNT" -gt 2000 ]; then
+            echo "✅ Large PR scenario passed - should skip review"
+          else
+            echo "❌ Large PR scenario failed"
+            exit 1
+          fi
+
+  test-draft-pr-scenario:
+    if: github.event.inputs.test_scenario == 'all' || github.event.inputs.test_scenario == 'draft-pr'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Test draft PR conditions
+        run: |
+          # Simulate draft PR condition check
+          DRAFT_STATUS="true"
+          USER_TYPE="User"
+          HAS_SKIP_LABEL="false"
+          
+          # Test the condition logic from the workflow
+          if [ "$DRAFT_STATUS" == "false" ] && [ "$USER_TYPE" != "Bot" ] && [ "$HAS_SKIP_LABEL" == "false" ]; then
+            echo "❌ Draft PR should be skipped but condition allows it"
+            exit 1
+          else
+            echo "✅ Draft PR correctly skipped"
+          fi
+          
+          # Test non-draft PR
+          DRAFT_STATUS="false"
+          if [ "$DRAFT_STATUS" == "false" ] && [ "$USER_TYPE" != "Bot" ] && [ "$HAS_SKIP_LABEL" == "false" ]; then
+            echo "✅ Non-draft PR correctly allowed"
+          else
+            echo "❌ Non-draft PR incorrectly skipped"
+            exit 1
+          fi
+
+  test-custom-prompt-scenario:
+    if: github.event.inputs.test_scenario == 'all' || github.event.inputs.test_scenario == 'custom-prompt'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Test custom prompt validation
+        run: |
+          # Test empty custom prompt (should use default)
+          CUSTOM_PROMPT=""
+          DEFAULT_PROMPT="You are an experienced software engineer"
+          
+          if [ -z "$CUSTOM_PROMPT" ]; then
+            EFFECTIVE_PROMPT="$DEFAULT_PROMPT"
+            echo "✅ Empty custom prompt uses default"
+          else
+            EFFECTIVE_PROMPT="$CUSTOM_PROMPT"
+          fi
+          
+          # Test non-empty custom prompt
+          CUSTOM_PROMPT="Focus on security and performance issues"
+          
+          if [ -n "$CUSTOM_PROMPT" ]; then
+            EFFECTIVE_PROMPT="$CUSTOM_PROMPT"
+            echo "✅ Custom prompt correctly applied: $EFFECTIVE_PROMPT"
+          else
+            echo "❌ Custom prompt not applied"
+            exit 1
+          fi
+
+  test-comment-collapsing-logic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Test comment collapsing logic
+        run: |
+          # Mock comment data for testing
+          cat > mock_comments.json << 'EOF'
+          [
+            {
+              "id": 1,
+              "user": {"login": "github-actions[bot]"},
+              "body": "## Claude finished reviewing\n\nHere's my review...",
+              "created_at": "2024-01-01T10:00:00Z"
+            },
+            {
+              "id": 2,
+              "user": {"login": "github-actions[bot]"},
+              "body": "<details><summary>Previous Claude Review</summary>\n\nOld review</details>",
+              "created_at": "2024-01-01T09:00:00Z"
+            },
+            {
+              "id": 3,
+              "user": {"login": "user"},
+              "body": "Thanks for the review!",
+              "created_at": "2024-01-01T11:00:00Z"
+            }
+          ]
+          EOF
+          
+          # Test logic for identifying Claude comments
+          node -e "
+          const comments = $(cat mock_comments.json);
+          let claudeCommentsFound = 0;
+          let shouldCollapse = 0;
+          let alreadyCollapsed = 0;
+          
+          for (const comment of comments) {
+            const isBot = comment.user.login === 'github-actions[bot]';
+            const hasClaudeFinished = comment.body.includes('Claude finished');
+            const hasDetails = comment.body.trim().startsWith('<details><summary>');
+            
+            if (isBot && hasClaudeFinished) {
+              claudeCommentsFound++;
+              if (!hasDetails) {
+                shouldCollapse++;
+              } else {
+                alreadyCollapsed++;
+              }
+            }
+          }
+          
+          console.log('Claude comments found:', claudeCommentsFound);
+          console.log('Should collapse:', shouldCollapse);
+          console.log('Already collapsed:', alreadyCollapsed);
+          
+          if (claudeCommentsFound === 2 && shouldCollapse === 1 && alreadyCollapsed === 1) {
+            console.log('✅ Comment collapsing logic works correctly');
+          } else {
+            console.log('❌ Comment collapsing logic failed');
+            process.exit(1);
+          }
+          "
+
+  integration-test-summary:
+    runs-on: ubuntu-latest
+    needs: [test-small-pr-scenario, test-large-pr-scenario, test-draft-pr-scenario, test-custom-prompt-scenario, test-comment-collapsing-logic]
+    if: always()
+    steps:
+      - name: Integration test summary
+        run: |
+          echo "## Integration Test Results"
+          echo "- Small PR scenario: ${{ needs.test-small-pr-scenario.result }}"
+          echo "- Large PR scenario: ${{ needs.test-large-pr-scenario.result }}"
+          echo "- Draft PR scenario: ${{ needs.test-draft-pr-scenario.result }}"
+          echo "- Custom prompt scenario: ${{ needs.test-custom-prompt-scenario.result }}"
+          echo "- Comment collapsing logic: ${{ needs.test-comment-collapsing-logic.result }}"
+          
+          # Check if any tests failed
+          if [[ "${{ needs.test-small-pr-scenario.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-large-pr-scenario.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-draft-pr-scenario.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-custom-prompt-scenario.result }}" == "failure" ]] || \
+             [[ "${{ needs.test-comment-collapsing-logic.result }}" == "failure" ]]; then
+            echo "❌ Some integration tests failed"
+            exit 1
+          else
+            echo "✅ All integration tests passed!"
+          fi

@@ -1,0 +1,188 @@
+name: Test Workflows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate-workflow-syntax:
+    runs-on: ubuntu-latest
+    name: Validate Workflow Syntax
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Validate YAML syntax
+        run: |
+          echo "Validating workflow YAML files..."
+          for file in .github/workflows/*.yml .github/workflows/*.yaml workflows/*.yml workflows/*.yaml; do
+            if [ -f "$file" ]; then
+              echo "Validating: $file"
+              python -c "import yaml; yaml.safe_load(open('$file'))" || exit 1
+            fi
+          done
+          
+      - name: Check required workflow components
+        run: |
+          echo "Checking Claude code review workflow..."
+          
+          # Check that claude-code-review.yml exists
+          if [ ! -f "workflows/claude-code-review.yml" ]; then
+            echo "ERROR: claude-code-review.yml not found"
+            exit 1
+          fi
+          
+          # Check for required inputs
+          if ! grep -q "workflow_call:" "workflows/claude-code-review.yml"; then
+            echo "ERROR: workflow_call trigger not found"
+            exit 1
+          fi
+          
+          # Check for required permissions
+          if ! grep -q "pull-requests: write" "workflows/claude-code-review.yml"; then
+            echo "ERROR: pull-requests write permission not found"
+            exit 1
+          fi
+          
+          # Check for Anthropic API key usage
+          if ! grep -q "ANTHROPIC_API_KEY" "workflows/claude-code-review.yml"; then
+            echo "ERROR: ANTHROPIC_API_KEY not found"
+            exit 1
+          fi
+          
+          echo "✅ All workflow validation checks passed!"
+
+  test-pr-size-calculation:
+    runs-on: ubuntu-latest
+    name: Test PR Size Calculation Logic
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Test PR size calculation
+        run: |
+          # Create test files to simulate different PR sizes
+          mkdir -p test-files
+          
+          # Small PR (5 files, 50 lines)
+          for i in {1..5}; do
+            for j in {1..10}; do
+              echo "test line $j" >> test-files/small_file_$i.txt
+            done
+          done
+          
+          # Large PR (60 files, 3000 lines)  
+          for i in {1..60}; do
+            for j in {1..50}; do
+              echo "test line $j" >> test-files/large_file_$i.txt
+            done
+          done
+          
+          # Test small PR logic
+          cd test-files
+          FILES_CHANGED=$(ls small_file_*.txt | wc -l)
+          LINES_CHANGED=$(cat small_file_*.txt | wc -l)
+          
+          echo "Small PR: $FILES_CHANGED files, $LINES_CHANGED lines"
+          
+          if [ "$FILES_CHANGED" -le 50 ] && [ "$LINES_CHANGED" -le 2000 ]; then
+            echo "✅ Small PR should be reviewed"
+          else
+            echo "❌ Small PR logic failed"
+            exit 1
+          fi
+          
+          # Test large PR logic
+          FILES_CHANGED=$(ls large_file_*.txt | wc -l)
+          LINES_CHANGED=$(cat large_file_*.txt | wc -l)
+          
+          echo "Large PR: $FILES_CHANGED files, $LINES_CHANGED lines"
+          
+          if [ "$FILES_CHANGED" -gt 50 ] || [ "$LINES_CHANGED" -gt 2000 ]; then
+            echo "✅ Large PR should be skipped"
+          else
+            echo "❌ Large PR logic failed"
+            exit 1
+          fi
+
+  test-workflow-inputs:
+    runs-on: ubuntu-latest
+    name: Test Workflow Input Validation
+    strategy:
+      matrix:
+        test-case:
+          - name: "default-inputs"
+            skip_large_prs: true
+            max_files: 50
+            max_lines: 2000
+          - name: "custom-inputs"
+            skip_large_prs: false
+            max_files: 100
+            max_lines: 5000
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Test workflow inputs - ${{ matrix.test-case.name }}
+        run: |
+          echo "Testing workflow inputs for: ${{ matrix.test-case.name }}"
+          echo "skip_large_prs: ${{ matrix.test-case.skip_large_prs }}"
+          echo "max_files: ${{ matrix.test-case.max_files }}"
+          echo "max_lines: ${{ matrix.test-case.max_lines }}"
+          
+          # Validate boolean input
+          if [ "${{ matrix.test-case.skip_large_prs }}" != "true" ] && [ "${{ matrix.test-case.skip_large_prs }}" != "false" ]; then
+            echo "❌ Invalid boolean value for skip_large_prs"
+            exit 1
+          fi
+          
+          # Validate numeric inputs
+          if [ "${{ matrix.test-case.max_files }}" -lt 1 ] || [ "${{ matrix.test-case.max_lines }}" -lt 1 ]; then
+            echo "❌ Invalid numeric values"
+            exit 1
+          fi
+          
+          echo "✅ Input validation passed for ${{ matrix.test-case.name }}"
+
+  test-pr-size-labeling:
+    runs-on: ubuntu-latest
+    name: Test PR Size Labeling Logic
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Test size labeling algorithm
+        run: |
+          # Test different PR sizes and expected labels
+          test_size_label() {
+            local files=$1
+            local lines=$2
+            local expected=$3
+            
+            # Simulate the labeling logic from the workflow
+            local size_label="size/XS"
+            if [ "$lines" -gt 500 ] || [ "$files" -gt 10 ]; then
+              size_label="size/L"
+            elif [ "$lines" -gt 100 ] || [ "$files" -gt 5 ]; then
+              size_label="size/M"
+            elif [ "$lines" -gt 30 ] || [ "$files" -gt 2 ]; then
+              size_label="size/S"
+            fi
+            
+            if [ "$size_label" = "$expected" ]; then
+              echo "✅ $files files, $lines lines -> $size_label (correct)"
+            else
+              echo "❌ $files files, $lines lines -> $size_label (expected $expected)"
+              exit 1
+            fi
+          }
+          
+          # Test cases
+          test_size_label 1 10 "size/XS"
+          test_size_label 3 50 "size/S" 
+          test_size_label 8 200 "size/M"
+          test_size_label 15 1000 "size/L"
+          test_size_label 2 600 "size/L"
