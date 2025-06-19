@@ -18,7 +18,7 @@ jobs:
       - name: Validate YAML syntax
         run: |
           echo "Validating workflow YAML files..."
-          for file in .github/workflows/*.yml .github/workflows/*.yaml; do
+          for file in .github/workflows/*.yml .github/workflows/*.yaml workflows/*.yml workflows/*.yaml; do
             if [ -f "$file" ]; then
               echo "Validating: $file"
               python -c "import yaml; yaml.safe_load(open('$file'))" || exit 1
@@ -30,25 +30,25 @@ jobs:
           echo "Checking Claude code review workflow..."
           
           # Check that claude-code-review.yml exists
-          if [ ! -f ".github/workflows/claude-code-review.yml" ]; then
+          if [ ! -f "workflows/claude-code-review.yml" ]; then
             echo "ERROR: claude-code-review.yml not found"
             exit 1
           fi
           
           # Check for required inputs
-          if ! grep -q "workflow_call:" ".github/workflows/claude-code-review.yml"; then
+          if ! grep -q "workflow_call:" "workflows/claude-code-review.yml"; then
             echo "ERROR: workflow_call trigger not found"
             exit 1
           fi
           
           # Check for required permissions
-          if ! grep -q "pull-requests: write" ".github/workflows/claude-code-review.yml"; then
+          if ! grep -q "pull-requests: write" "workflows/claude-code-review.yml"; then
             echo "ERROR: pull-requests write permission not found"
             exit 1
           fi
           
           # Check for Anthropic API key usage
-          if ! grep -q "ANTHROPIC_API_KEY" ".github/workflows/claude-code-review.yml"; then
+          if ! grep -q "ANTHROPIC_API_KEY" "workflows/claude-code-review.yml"; then
             echo "ERROR: ANTHROPIC_API_KEY not found"
             exit 1
           fi
