@@ -1,0 +1,102 @@
+name: 'Setup Kustomize'
+description: 'Install Kustomize with caching support'
+author: 'Tote Tech'
+
+inputs:
+  version:
+    description: 'Kustomize version to install'
+    required: false
+    default: 'v5.3.0'
+  install-dir:
+    description: 'Installation directory'
+    required: false
+    default: '~/.local/bin'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Normalize install directory
+      id: normalize
+      shell: bash
+      run: |
+        # Expand the tilde and normalize the path
+        INSTALL_DIR="${{ inputs.install-dir }}"
+        INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+        echo "install-dir=$INSTALL_DIR" >> $GITHUB_OUTPUT
+        
+    - name: Setup cache for Kustomize
+      id: cache-kustomize
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.normalize.outputs.install-dir }}/kustomize
+        key: ${{ runner.os }}-kustomize-${{ inputs.version }}
+        
+    - name: Create installation directory
+      if: steps.cache-kustomize.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p "${{ steps.normalize.outputs.install-dir }}"
+        
+    - name: Download and install Kustomize
+      if: steps.cache-kustomize.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -e
+        
+        # Construct download URL
+        VERSION="${{ inputs.version }}"
+        URL="https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${VERSION}/kustomize_${VERSION}_linux_amd64.tar.gz"
+        
+        echo "Downloading Kustomize ${VERSION} from: $URL"
+        
+        # Download with retry logic
+        MAX_RETRIES=3
+        RETRY_COUNT=0
+        
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          if curl -L -o /tmp/kustomize.tar.gz "$URL"; then
+            echo "Download successful"
+            break
+          else
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Download failed, retry $RETRY_COUNT of $MAX_RETRIES"
+            if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+              echo "Failed to download Kustomize after $MAX_RETRIES attempts"
+              exit 1
+            fi
+            sleep 2
+          fi
+        done
+        
+        # Extract and install
+        tar -xzf /tmp/kustomize.tar.gz -C /tmp
+        chmod +x /tmp/kustomize
+        mv /tmp/kustomize "${{ steps.normalize.outputs.install-dir }}/kustomize"
+        
+        # Cleanup
+        rm -f /tmp/kustomize.tar.gz
+        
+        # Verify installation
+        if [ ! -f "${{ steps.normalize.outputs.install-dir }}/kustomize" ]; then
+          echo "Kustomize installation failed"
+          exit 1
+        fi
+        
+        echo "Kustomize installed successfully"
+        
+    - name: Add Kustomize to PATH
+      shell: bash
+      run: |
+        echo "${{ steps.normalize.outputs.install-dir }}" >> $GITHUB_PATH
+        
+    - name: Verify Kustomize installation
+      shell: bash
+      run: |
+        # Verify kustomize is available
+        if ! command -v kustomize &> /dev/null; then
+          echo "Kustomize not found in PATH after installation"
+          exit 1
+        fi
+        
+        # Print version
+        kustomize version
