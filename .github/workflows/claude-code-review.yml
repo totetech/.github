@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event.pull_request.draft == false &&
-      github.event.pull_request.user.type != 'Bot' &&
+      (github.event.pull_request.user.type != 'Bot' || github.event.pull_request.user.login == 'cursor[bot]') &&
       !contains(github.event.pull_request.labels.*.name, 'skip-review')
     steps:
       - name: Checkout repository
