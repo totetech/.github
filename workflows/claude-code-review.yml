@@ -44,22 +44,34 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Check PR size
         id: pr-size
-        run: |
-          FILES_CHANGED=$(git diff --name-only HEAD~1 | wc -l)
-          LINES_CHANGED=$(git diff --shortstat HEAD~1 | grep -oE '[0-9]+ insertions|[0-9]+ deletions' | grep -oE '[0-9]+' | paste -sd+ | bc || echo 0)
-          
-          echo "files_changed=$FILES_CHANGED" >> $GITHUB_OUTPUT
-          echo "lines_changed=$LINES_CHANGED" >> $GITHUB_OUTPUT
-          
-          if [ "${{ inputs.skip_large_prs }}" == "true" ] && ([ "$FILES_CHANGED" -gt ${{ inputs.max_files }} ] || [ "$LINES_CHANGED" -gt ${{ inputs.max_lines }} ]); then
-            echo "skip_review=true" >> $GITHUB_OUTPUT
-            echo "⚠️ PR is too large for automated review (${FILES_CHANGED} files, ${LINES_CHANGED} lines changed)"
-          else
-            echo "skip_review=false" >> $GITHUB_OUTPUT
-          fi
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const filesChanged = pr.data.changed_files;
+            const linesChanged = pr.data.additions + pr.data.deletions;
+
+            core.setOutput('files_changed', filesChanged);
+            core.setOutput('lines_changed', linesChanged);
+
+            const skipLargePrs = ${{ inputs.skip_large_prs }};
+            const maxFiles = ${{ inputs.max_files }};
+            const maxLines = ${{ inputs.max_lines }};
+
+            if (skipLargePrs && (filesChanged > maxFiles || linesChanged > maxLines)) {
+              core.setOutput('skip_review', 'true');
+              console.log(`⚠️ PR is too large for automated review (${filesChanged} files, ${linesChanged} lines changed)`);
+            } else {
+              core.setOutput('skip_review', 'false');
+            }
           
       - name: Add PR size label
         if: always()
