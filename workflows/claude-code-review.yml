@@ -39,7 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event.pull_request.draft == false &&
-      github.event.pull_request.user.type != 'Bot' &&
       !contains(github.event.pull_request.labels.*.name, 'skip-review')
     steps:
       - name: Checkout repository
@@ -192,6 +191,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_bots: 'cursor[bot]'
           direct_prompt: |
             ${{ inputs.custom_prompt != '' && inputs.custom_prompt || 'You are an experienced software engineer tasked with reviewing a GitHub pull request. Your goal is to provide valuable feedback to improve code quality, catch potential issues, and ensure the changes align with best practices.
 
