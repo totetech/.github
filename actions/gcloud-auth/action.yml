@@ -14,9 +14,9 @@ inputs:
     required: false
     default: 'access_token'
   access_token_lifetime:
-    description: 'Access token lifetime in seconds'
+    description: 'Access token lifetime as a Go-style duration string (e.g. 1800s)'
     required: false
-    default: '1800'
+    default: '1800s'
   region:
     description: 'Artifact Registry region for Docker auth'
     required: false
@@ -25,9 +25,6 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
-
     - name: Authenticate to Google Cloud
       uses: google-github-actions/auth@v2
       with:
@@ -35,6 +32,9 @@ runs:
         service_account: ${{ inputs.service_account }}
         token_format: ${{ inputs.token_format }}
         access_token_lifetime: ${{ inputs.access_token_lifetime }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
 
     - name: Configure Docker
       run: gcloud auth configure-docker "${{ inputs.region }}-docker.pkg.dev" --quiet

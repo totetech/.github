@@ -31,7 +31,11 @@ runs:
     - name: Compute image tag
       id: tags
       run: |
-        BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        if [[ -n "$GITHUB_HEAD_REF" ]]; then
+          BRANCH_NAME="$GITHUB_HEAD_REF"
+        else
+          BRANCH_NAME="$GITHUB_REF_NAME"
+        fi
         BRANCH_NAME=${BRANCH_NAME//\//-}
         BRANCH_NAME=${BRANCH_NAME:0:25}
         IMAGE_TAG="${{ inputs.ar_registry }}/${{ inputs.image_name }}:${BRANCH_NAME}-${{ github.sha }}"

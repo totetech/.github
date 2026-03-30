@@ -23,7 +23,7 @@ steps:
     with:
       workload_identity_provider: 'projects/<project-number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>'
       service_account: '<sa-name>@<project>.iam.gserviceaccount.com'
-      access_token_lifetime: '1800'  # optional, default 30 min
+      access_token_lifetime: '1800s'  # optional, default 30 min
       region: 'us-central1'          # optional, for Docker registry auth
 ```
 
@@ -34,7 +34,7 @@ steps:
 | `workload_identity_provider` | Yes | — | WIF provider resource path |
 | `service_account` | Yes | — | Service account email |
 | `token_format` | No | `access_token` | Token format to request |
-| `access_token_lifetime` | No | `1800` | Token lifetime in seconds |
+| `access_token_lifetime` | No | `1800s` | Token lifetime as Go-style duration string |
 | `region` | No | `us-central1` | Artifact Registry region for Docker auth |
 
 ### `docker-build` — Build and Push to Artifact Registry
